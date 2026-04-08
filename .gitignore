@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+*.egg-info/
+
+# Runtime
+uploads/
+output/
+*.log
+.server.pid
+history.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (if extracted)
+node/
+node_modules/
+
+# Vendor / offline packages
+vendor/
+deploy-linux/vendor/
+
+# Build artifacts
+*.tar.gz
+*.zip
+
+# Release packages
+*.tar.gz
+*.zip
+pack.py

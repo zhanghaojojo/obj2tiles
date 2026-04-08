@@ -1,0 +1,7 @@
+flask>=3.0.0
+flask-cors>=4.0.0
+werkzeug>=3.0.0
+Pillow>=10.0.0
+numpy>=1.24.0
+DracoPy>=2.0.0
+pyproj>=3.6.0
