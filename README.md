@@ -1,10 +1,12 @@
 <div align="center">
 
-# OBJ2Tiles
+# 浩瀚智模
 
-**高性能 OBJ 模型 → OGC 3D Tiles 转换引擎**
+**HorizonGIS Model**
 
-*跨平台 · 国产化适配 · 纹理压缩 · 几何压缩 · 零 Node.js 依赖*
+三维数据处理与转换工具链
+
+基于 Obj2Tiles 核心引擎深度定制，支持 OBJ 模型批量转换为 [OGC 3D Tiles](https://www.ogc.org/standard/3dtiles/) 标准瓦片，跨平台部署，Web UI 可视化管理。
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?logo=python&logoColor=white)](https://python.org)
 [![Flask](https://img.shields.io/badge/Flask-3.x-000000?logo=flask)](https://flask.palletsprojects.com)
@@ -17,13 +19,14 @@
 
 ## 概述
 
-OBJ2Tiles 是一套面向 **生产环境** 的三维模型数据转换服务，将 Wavefront OBJ 格式高效转换为符合 [OGC 3D Tiles 1.0](https://www.ogc.org/standard/3dtiles/) 标准的瓦片数据集。内置 **Draco 几何压缩、WebP / KTX2 纹理压缩** 全链路后处理管线，整体技术栈为纯 Python 实现，**零 Node.js 运行时依赖**。
+浩瀚智模（HorizonGIS Model）是一套面向 **生产环境** 的三维模型数据转换服务。核心能力：
 
-> 已在 **Windows 10/11、Ubuntu 20.04/22.04、银河麒麟 V10、统信 UOS V20** 环境验证通过。
+- **OBJ → 3D Tiles** 人工模型转换（Octree 多级 LOD）
+- **管线 GUID 模型** 批量扫描、投影坐标自动转 WGS84、合并输出
+- **全链路后处理** — Draco 几何压缩 · WebP / KTX2 纹理压缩，纯 Python 实现，零 Node.js 依赖
+- **Windows + Linux 双平台** · Web 管理界面 · 内网离线部署
 
-### 截图
-
-> TODO: 添加 Web UI 截图
+> 已在 **Windows 10/11、Ubuntu 22.04、银河麒麟 V10、统信 UOS V20** 环境验证通过。
 
 ---
 
@@ -236,12 +239,9 @@ obj2tiles/
 
 ## 作者
 
-**张二狗** — 野生程序员 🐕
+**张二狗** — 野生程序员 · 天生反骨 🐕
 
-一个在 GIS 和三维可视化领域摸爬滚打的独立开发者。白天搬砖，晚上写码，周末调 Bug。
-
-- 擅长：三维数据处理、WebGIS、跨平台工程化
-- 状态：永远在 debug 的路上
+GIS 与三维可视化独立开发者。不信权威，只信代码。白天搬砖，深夜炼丹，周末和 Bug 对线。
 
 ---
 
@@ -249,7 +249,7 @@ obj2tiles/
 
 [MIT License](LICENSE)
 
-Copyright © 2024 张二狗
+Copyright © 2024 张二狗 / HorizonGIS
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
