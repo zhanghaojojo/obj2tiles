@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OBJ → 3D Tiles 转换工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.119/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.119/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *{font-family:'Inter','Microsoft YaHei',sans-serif;margin:0;padding:0;box-sizing:border-box}
+        html,body{height:100%;overflow:hidden;background:#080c18;color:#fff}
+
+        .sidebar{background:linear-gradient(180deg,rgba(12,16,32,0.98),rgba(8,11,24,0.98));border-right:1px solid rgba(255,255,255,0.05)}
+        .sidebar::after{content:'';position:absolute;top:0;right:0;bottom:0;width:1px;background:linear-gradient(180deg,rgba(99,102,241,0.15),transparent 50%,rgba(139,92,246,0.15))}
+        .nav-item{transition:all .25s;border-left:3px solid transparent;position:relative}
+        .nav-item:hover{background:rgba(255,255,255,0.03)}
+        .nav-item.active{background:linear-gradient(90deg,rgba(99,102,241,0.12),transparent);border-left-color:#6366f1;color:#a5b4fc}
+        .nav-item.active::after{content:'';position:absolute;right:0;top:25%;bottom:25%;width:2px;background:#6366f1;border-radius:1px}
+
+        .page{display:none;height:100%;overflow-y:auto}
+        .page.active{display:flex;flex-direction:column}
+        .page>*{flex-shrink:0}
+        .page::-webkit-scrollbar{width:5px}
+        .page::-webkit-scrollbar-track{background:transparent}
+        .page::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:3px}
+
+        .glass{background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:16px;position:relative;overflow:hidden}
+        .glass::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent)}
+
+        .input-f{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px 14px;font-size:13px;color:#fff;outline:none;transition:all .3s;width:100%}
+        .input-f:hover{border-color:rgba(255,255,255,0.12);background:rgba(255,255,255,0.06)}
+        .input-f:focus{border-color:rgba(99,102,241,0.5);box-shadow:0 0 0 3px rgba(99,102,241,0.1);background:rgba(99,102,241,0.04)}
+        .input-f::placeholder{color:#3b4252}
+
+        .btn{padding:10px 20px;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;transition:all .3s;border:none;display:inline-flex;align-items:center;gap:6px;position:relative}
+        .btn-primary{background:linear-gradient(135deg,#5b5cf6,#7c3aed,#8b5cf6);color:#fff;box-shadow:0 4px 16px rgba(99,102,241,0.2)}
+        .btn-primary::before{content:'';position:absolute;inset:0;border-radius:10px;background:linear-gradient(135deg,rgba(255,255,255,0.1),transparent);opacity:0;transition:opacity .3s}
+        .btn-primary:hover{box-shadow:0 8px 28px rgba(99,102,241,0.4);transform:translateY(-1px)}
+        .btn-primary:hover::before{opacity:1}
+        .btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+        .btn-ghost{background:rgba(255,255,255,0.03);color:#9ca3af;border:1px solid rgba(255,255,255,0.08)}
+        .btn-ghost:hover{background:rgba(255,255,255,0.06);color:#e5e7eb;border-color:rgba(99,102,241,0.3)}
+
+        .collapse-body{max-height:0;overflow:hidden;transition:max-height .35s ease}
+        .collapse-body.open{max-height:600px}
+
+        .progress-bar{background:linear-gradient(90deg,#6366f1,#8b5cf6,#a78bfa,#8b5cf6);background-size:300% 100%;animation:shimmer 3s linear infinite;border-radius:99px;height:100%;transition:width .5s}
+        @keyframes shimmer{0%{background-position:300% 0}100%{background-position:-300% 0}}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+        .pulse{animation:pulse 1.5s ease-in-out infinite}
+
+        .log-box{font-family:'Cascadia Code','Consolas',monospace;font-size:12px;line-height:1.8;color:#6b7280;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+        .log-box::-webkit-scrollbar{width:4px}
+        .log-box::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px}
+
+        .badge{font-size:10px;padding:2px 8px;border-radius:99px;font-weight:600;letter-spacing:.3px}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        .fade-up{animation:fadeUp .4s ease-out}
+
+        .section-label{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1px}
+        .section-label::before{content:'';width:3px;height:14px;border-radius:1px;background:#6366f1}
+
+        .page-header{height:56px;display:flex;align-items:center;padding:0 24px;border-bottom:1px solid rgba(255,255,255,0.04);flex-shrink:0;position:relative}
+        .page-header::after{content:'';position:absolute;bottom:0;left:24px;right:24px;height:1px;background:linear-gradient(90deg,transparent,rgba(99,102,241,0.15),transparent)}
+
+        .top-glow{position:absolute;top:-60%;left:50%;transform:translateX(-50%);width:400px;height:120px;background:radial-gradient(ellipse,rgba(99,102,241,0.06),transparent 70%);pointer-events:none}
+
+        .upload-zone{border:2px dashed rgba(255,255,255,0.08);border-radius:14px;padding:32px 16px;text-align:center;cursor:pointer;transition:all .3s}
+        .upload-zone:hover,.upload-zone.dragover{border-color:rgba(99,102,241,0.4);background:rgba(99,102,241,0.04)}
+
+        .toggle-item input[type="checkbox"]{appearance:none;width:36px;height:20px;background:rgba(255,255,255,0.1);border-radius:10px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
+        .toggle-item input[type="checkbox"]::after{content:'';position:absolute;width:16px;height:16px;background:#fff;border-radius:50%;top:2px;left:2px;transition:transform .2s}
+        .toggle-item input[type="checkbox"]:checked{background:#6366f1}
+        .toggle-item input[type="checkbox"]:checked::after{transform:translateX(16px)}
+
+        .task-card{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:14px;overflow:hidden;transition:all .3s;cursor:pointer}
+        .task-card:hover{border-color:rgba(99,102,241,0.2);background:rgba(255,255,255,0.035)}
+
+        .cesium-viewer-bottom,.cesium-viewer-animationContainer,.cesium-viewer-timelineContainer,.cesium-viewer-fullscreenContainer{display:none!important}
+    </style>
+</head>
+<body>
+<div class="flex h-full">
+    <!-- ===== 左侧边栏 ===== -->
+    <div class="sidebar w-56 flex flex-col flex-shrink-0 relative">
+        <div class="px-5 py-5 flex items-center gap-3 border-b border-white/5 relative">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-fuchsia-500 flex items-center justify-center flex-shrink-0 shadow-lg shadow-indigo-500/20">
+                <svg class="w-5 h-5" fill="none" stroke="white" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                </svg>
+            </div>
+            <div>
+                <div class="text-[13px] font-bold text-white leading-tight tracking-wide">3D Tiles 转换</div>
+                <div class="text-[10px] text-indigo-400/60 mt-0.5 font-medium">OBJ Converter v1.0</div>
+            </div>
+        </div>
+        <nav class="flex-1 py-3 space-y-0.5">
+            <div class="px-3 mb-2"><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">工作区</span></div>
+            <a onclick="switchPage('task')" class="nav-item active flex items-center gap-3 px-5 py-2.5 cursor-pointer text-sm text-gray-300" id="nav-task">
+                <svg class="w-4 h-4 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                任务配置
+            </a>
+            <a onclick="switchPage('tasks')" class="nav-item flex items-center gap-3 px-5 py-2.5 cursor-pointer text-sm text-gray-300" id="nav-tasks">
+                <svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                任务列表
+                <span id="navBadge" class="badge bg-indigo-500/20 text-indigo-300 ml-auto hidden">运行中</span>
+            </a>
+            <a onclick="switchPage('history')" class="nav-item flex items-center gap-3 px-5 py-2.5 cursor-pointer text-sm text-gray-300" id="nav-history">
+                <svg class="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                历史记录
+            </a>
+            <a onclick="switchPage('preview')" class="nav-item flex items-center gap-3 px-5 py-2.5 cursor-pointer text-sm text-gray-300" id="nav-preview">
+                <svg class="w-4 h-4 text-sky-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                3D 预览
+            </a>
+            <div class="px-3 mt-3 mb-2"><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">专项工具</span></div>
+            <a onclick="switchPage('pipeline')" class="nav-item flex items-center gap-3 px-5 py-2.5 cursor-pointer text-sm text-gray-300" id="nav-pipeline">
+                <svg class="w-4 h-4 text-rose-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+                管线转换
+            </a>
+        </nav>
+        <div class="px-5 py-3 border-t border-white/5 space-y-1">
+            <div class="flex items-center gap-2 text-xs">
+                <span id="statusDot" class="w-2 h-2 rounded-full bg-gray-600"></span>
+                <span id="statusText" class="text-gray-500 text-xs">检测中...</span>
+            </div>
+            <div class="text-[10px] text-gray-600">Powered by Obj2Tiles</div>
+        </div>
+    </div>
+
+    <!-- ===== 右侧主内容 ===== -->
+    <div class="flex-1 flex flex-col min-w-0">
+        <div class="page-header">
+            <div class="top-glow"></div>
+            <h2 id="pageTitle" class="text-sm font-semibold text-gray-300 tracking-wide">任务配置</h2>
+        </div>
+
+        <!-- ====== Page: 任务配置 ====== -->
+        <div id="page-task" class="page active flex-1 px-6 py-5 gap-5">
+            <!-- 文件上传 -->
+            <div class="glass p-5">
+                <span class="section-label mb-3">文件上传</span>
+                <div class="upload-zone" id="uploadZone">
+                    <svg class="w-10 h-10 mx-auto mb-2" style="stroke:rgba(255,255,255,0.2)" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    <p class="text-sm text-gray-500">拖拽文件到此处或点击选择</p>
+                    <p class="text-[11px] text-gray-600 mt-1">支持多选：.obj + .mtl + 纹理文件，或 .zip 包</p>
+                    <input type="file" id="fileInput" accept=".obj,.mtl,.jpg,.jpeg,.png,.tif,.tiff,.zip" multiple style="display:none">
+                    <div id="fileName" class="text-xs text-indigo-400 mt-2"></div>
+                </div>
+            </div>
+
+            <!-- 转换选项 + 高级参数 -->
+            <div class="glass overflow-hidden">
+                <div class="p-5 pb-4">
+                    <span class="section-label mb-3">转换选项</span>
+                    <!-- 转换模式 -->
+                    <div class="mt-3">
+                        <label class="text-[10px] text-gray-500 mb-1.5 block">转换模式</label>
+                        <div class="flex gap-2">
+                            <button id="modeOctree" onclick="setMode('octree')" class="flex-1 py-2 rounded-lg text-xs font-medium border-2 border-indigo-500 bg-indigo-500/15 text-indigo-300 transition cursor-pointer">八叉树 (LOD)</button>
+                            <button id="modeSimple" onclick="setMode('simple')" class="flex-1 py-2 rounded-lg text-xs font-medium border-2 border-white/10 text-gray-500 hover:border-white/20 transition cursor-pointer">小场景 (NoLOD)</button>
+                        </div>
+                    </div>
+                    <!-- 开关选项 -->
+                    <div class="flex flex-wrap gap-x-5 gap-y-2 mt-4">
+                        <label class="toggle-item flex items-center gap-2 cursor-pointer text-xs text-gray-400">
+                            <input type="checkbox" id="yUpToZUp">
+                            <span>Y轴转Z轴</span>
+                        </label>
+                        <label class="toggle-item flex items-center gap-2 cursor-pointer text-xs text-gray-400">
+                            <input type="checkbox" id="localMode">
+                            <span>本地模式</span>
+                        </label>
+                        <label class="toggle-item flex items-center gap-2 cursor-pointer text-xs text-gray-400">
+                            <input type="checkbox" id="keepTextures">
+                            <span>保留纹理</span>
+                        </label>
+                    </div>
+                    <!-- 后处理选项 -->
+                    <div class="mt-3 pt-3 border-t border-white/5">
+                        <label class="text-[10px] text-gray-500 mb-1.5 block">后处理（转换完成后执行）</label>
+                        <div class="flex flex-wrap gap-x-5 gap-y-2">
+                            <label class="toggle-item flex items-center gap-2 cursor-pointer text-xs text-gray-400">
+                                <input type="checkbox" id="ppDraco">
+                                <span>Draco 压缩</span>
+                            </label>
+                            <label class="toggle-item flex items-center gap-2 cursor-pointer text-xs text-gray-400">
+                                <input type="checkbox" id="ppWebp">
+                                <span>WebP 纹理</span>
+                            </label>
+                            <label class="toggle-item flex items-center gap-2 cursor-pointer text-xs text-gray-400">
+                                <input type="checkbox" id="ppKtx2">
+                                <span>KTX2 纹理</span>
+                            </label>
+                            <select id="ppKtx2Mode" class="text-[10px] text-gray-400 bg-transparent border border-white/10 rounded px-2 py-1 outline-none" style="display:none">
+                                <option value="uastc">UASTC (高质量+Zstd)</option>
+                                <option value="etc1s">ETC1S (高压缩)</option>
+                            </select>
+                        </div>
+                        <div class="text-[10px] text-gray-600 mt-1">WebP/KTX2/Draco 均为纯 Python 实现，KTX2 另需 toktx</div>
+                    </div>
+                </div>
+                <!-- 高级参数折叠 -->
+                <button onclick="toggleAdvanced()" class="w-full flex items-center justify-between px-5 py-3 text-xs font-medium text-gray-400 hover:text-gray-200 transition border-t border-white/5">
+                    <span class="flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                        高级参数
+                    </span>
+                    <svg id="advArrow" class="w-3.5 h-3.5 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                <div id="advPanel" class="collapse-body">
+                    <div class="px-5 pb-4 space-y-3 border-t border-white/5 pt-3">
+                        <!-- 八叉树参数 -->
+                        <div id="octreeParams">
+                            <div class="grid grid-cols-4 gap-2">
+                                <div><label class="text-[10px] text-gray-500">LOD 层级</label><input id="lods" type="number" value="3" min="1" max="10" class="input-f mt-1 text-xs"></div>
+                                <div><label class="text-[10px] text-gray-500">分割数</label><input id="divisions" type="number" value="2" min="1" max="8" class="input-f mt-1 text-xs"></div>
+                                <div><label class="text-[10px] text-gray-500">误差阈值</label><input id="error" type="number" value="100" min="1" step="any" class="input-f mt-1 text-xs"></div>
+                                <div><label class="text-[10px] text-gray-500">缩放比例</label><input id="scale" type="number" value="1" min="0.001" step="any" class="input-f mt-1 text-xs"></div>
+                            </div>
+                            <div class="mt-2">
+                                <label class="text-[10px] text-gray-500">分割策略</label>
+                                <select id="splitStrategy" class="input-f mt-1 text-xs" style="background:rgba(255,255,255,0.04)">
+                                    <option value="">默认 (VertexBaricenter)</option>
+                                    <option value="VertexMedian">VertexMedian（更均衡）</option>
+                                    <option value="AbsoluteCenter">AbsoluteCenter</option>
+                                </select>
+                            </div>
+                        </div>
+                        <!-- 小场景参数 -->
+                        <div id="simpleParams" class="hidden">
+                            <div class="grid grid-cols-2 gap-2">
+                                <div><label class="text-[10px] text-gray-500">缩放比例</label><input id="scaleSimple" type="number" value="1" min="0.001" step="any" class="input-f mt-1 text-xs"></div>
+                            </div>
+                        </div>
+                        <!-- 旋转修正 -->
+                        <div>
+                            <label class="text-[10px] text-gray-500 mb-1.5 block">模型朝向修正（度）</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div><label class="text-[10px] text-gray-500">绕 X 轴</label><input id="rotateX" type="number" value="-90" step="any" class="input-f mt-1 text-xs"></div>
+                                <div><label class="text-[10px] text-gray-500">绕 Y 轴</label><input id="rotateY" type="number" value="0" step="any" class="input-f mt-1 text-xs"></div>
+                                <div><label class="text-[10px] text-gray-500">绕 Z 轴</label><input id="rotateZ" type="number" value="0" step="any" class="input-f mt-1 text-xs"></div>
+                            </div>
+                            <div class="text-[10px] text-gray-600 mt-1">模型站立时试试 X=-90；已正常可全部设 0</div>
+                        </div>
+                        <!-- 额外开关 -->
+                        <div class="flex flex-wrap gap-x-5 gap-y-2">
+                            <label class="toggle-item flex items-center gap-2 cursor-pointer text-xs text-gray-400">
+                                <input type="checkbox" id="zsplit">
+                                <span>Z轴分割</span>
+                            </label>
+                            <label class="toggle-item flex items-center gap-2 cursor-pointer text-xs text-gray-400">
+                                <input type="checkbox" id="useSystemTemp">
+                                <span>系统临时目录</span>
+                            </label>
+                            <label class="toggle-item flex items-center gap-2 cursor-pointer text-xs text-gray-400">
+                                <input type="checkbox" id="keepIntermediate">
+                                <span>保留中间文件</span>
+                            </label>
+                        </div>
+                        <!-- 停止阶段 -->
+                        <div>
+                            <label class="text-[10px] text-gray-500">停止阶段</label>
+                            <select id="stage" class="input-f mt-1 text-xs" style="background:rgba(255,255,255,0.04)">
+                                <option value="">完整流程 (Tiling)</option>
+                                <option value="Decimation">仅精简 (Decimation)</option>
+                                <option value="Splitting">精简+分割 (Splitting)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 地理定位 -->
+            <div class="glass p-5" id="geoPanel">
+                <span class="section-label mb-3">地理定位（可选）</span>
+                <div class="grid grid-cols-3 gap-3 mt-3">
+                    <div><label class="text-[10px] text-gray-500">纬度 (Lat)</label><input id="lat" type="number" placeholder="如 39.9042" step="any" class="input-f mt-1 text-xs"></div>
+                    <div><label class="text-[10px] text-gray-500">经度 (Lon)</label><input id="lon" type="number" placeholder="如 116.4074" step="any" class="input-f mt-1 text-xs"></div>
+                    <div><label class="text-[10px] text-gray-500">高度 (Alt, 米)</label><input id="alt" type="number" value="0" step="any" class="input-f mt-1 text-xs"></div>
+                </div>
+            </div>
+
+            <!-- 开始转换 -->
+            <div style="flex:0 0 auto">
+                <button id="convertBtn" onclick="startConvert()" class="btn btn-primary w-full justify-center py-3 text-sm font-bold tracking-wider" style="border-radius:14px" disabled>
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    开始转换
+                </button>
+            </div>
+        </div>
+
+        <!-- ====== Page: 任务列表 ====== -->
+        <div id="page-tasks" class="page flex-1 px-6 py-5 gap-5">
+            <div class="glass p-5 flex-shrink-0">
+                <div class="flex items-center justify-between">
+                    <span class="section-label">任务列表</span>
+                    <span id="taskCount" class="text-[10px] text-gray-500">0 个任务</span>
+                </div>
+            </div>
+            <div id="taskList" class="flex-1 overflow-y-auto space-y-2 min-h-0" style="scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.08) transparent"></div>
+            <div id="taskEmpty" class="flex-1 flex items-center justify-center">
+                <div class="text-center">
+                    <svg class="w-12 h-12 text-gray-700 mx-auto mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+                    <p class="text-xs text-gray-600">暂无任务</p>
+                    <p class="text-[10px] text-gray-700 mt-1">上传文件并开始转换后任务将出现在这里</p>
+                </div>
+            </div>
+            <!-- 日志 -->
+            <div id="logSection" class="glass p-5 flex flex-col min-h-0 hidden" style="max-height:260px;flex-shrink:1!important;overflow:hidden">
+                <div class="flex items-center justify-between mb-3 flex-shrink-0">
+                    <span class="text-xs font-medium text-gray-400">转换日志</span>
+                    <span id="logTaskId" class="text-[10px] text-indigo-400 font-mono"></span>
+                </div>
+                <div id="logContent" class="log-box flex-1 min-h-0" style="overflow-y:auto"></div>
+            </div>
+        </div>
+
+        <!-- ====== Page: 历史记录 ====== -->
+        <div id="page-history" class="page flex-1 px-6 py-5 gap-5">
+            <div class="glass p-5 flex-shrink-0">
+                <div class="flex items-center justify-between">
+                    <span class="section-label">转换历史</span>
+                    <span id="historyCount" class="text-[10px] text-gray-500">0 条记录</span>
+                </div>
+            </div>
+            <div id="historyList" class="flex-1 overflow-y-auto space-y-2 min-h-0" style="scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.08) transparent"></div>
+            <div id="historyEmpty" class="flex-1 flex items-center justify-center">
+                <div class="text-center">
+                    <svg class="w-12 h-12 text-gray-700 mx-auto mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <p class="text-xs text-gray-600">暂无历史记录</p>
+                    <p class="text-[10px] text-gray-700 mt-1">完成转换后记录将自动保存在这里</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====== Page: 管线转换 ====== -->
+        <div id="page-pipeline" class="page flex-1 px-6 py-5 gap-5">
+            <!-- 目录选择 -->
+            <div class="glass p-5">
+                <span class="section-label mb-3">管线数据目录</span>
+                <p class="text-[11px] text-gray-500 mt-1 mb-3">指定包含 GUID 命名的 .obj / .mtl / .json 文件的服务器本地目录</p>
+                <div class="flex gap-2">
+                    <input id="pipelinePath" type="text" placeholder="如 D:\OBJ\路灯" class="input-f flex-1 text-xs" style="font-family:monospace">
+                    <button id="pipelineScanBtn" onclick="scanPipeline()" class="btn btn-primary text-xs" style="white-space:nowrap">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        扫描目录
+                    </button>
+                </div>
+            </div>
+
+            <!-- 扫描结果 -->
+            <div id="pipelineResult" class="glass p-5 hidden">
+                <span class="section-label mb-3">扫描结果</span>
+                <div class="grid grid-cols-4 gap-3 mt-3">
+                    <div class="text-center p-3 rounded-lg" style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.12)">
+                        <div id="plModelCount" class="text-xl font-bold text-indigo-400">0</div>
+                        <div class="text-[10px] text-gray-500 mt-1">模型数量</div>
+                    </div>
+                    <div class="text-center p-3 rounded-lg" style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.12)">
+                        <div id="plEpsg" class="text-sm font-bold text-emerald-400 truncate">-</div>
+                        <div class="text-[10px] text-gray-500 mt-1">坐标系</div>
+                    </div>
+                    <div class="text-center p-3 rounded-lg" style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.12)">
+                        <div id="plTexCount" class="text-xl font-bold text-amber-400">0</div>
+                        <div class="text-[10px] text-gray-500 mt-1">纹理文件</div>
+                    </div>
+                    <div class="text-center p-3 rounded-lg" style="background:rgba(236,72,153,0.06);border:1px solid rgba(236,72,153,0.12)">
+                        <div id="plDataType" class="text-sm font-bold text-pink-400 truncate">-</div>
+                        <div class="text-[10px] text-gray-500 mt-1">数据类型</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 转换选项 -->
+            <div id="pipelineOptions" class="glass overflow-hidden hidden">
+                <div class="p-5 pb-4">
+                    <span class="section-label mb-3">转换选项</span>
+                    <div class="flex flex-wrap gap-x-5 gap-y-2 mt-3">
+                        <label class="toggle-item flex items-center gap-2 cursor-pointer text-xs text-gray-400">
+                            <input type="checkbox" id="plKeepTextures" checked>
+                            <span>保留纹理</span>
+                        </label>
+                    </div>
+                    <div class="mt-3 pt-3 border-t border-white/5">
+                        <label class="text-[10px] text-gray-500 mb-1.5 block">后处理</label>
+                        <div class="flex flex-wrap gap-x-5 gap-y-2">
+                            <label class="toggle-item flex items-center gap-2 cursor-pointer text-xs text-gray-400">
+                                <input type="checkbox" id="plDraco">
+                                <span>Draco 压缩</span>
+                            </label>
+                            <label class="toggle-item flex items-center gap-2 cursor-pointer text-xs text-gray-400">
+                                <input type="checkbox" id="plWebp">
+                                <span>WebP 纹理</span>
+                            </label>
+                            <label class="toggle-item flex items-center gap-2 cursor-pointer text-xs text-gray-400">
+                                <input type="checkbox" id="plKtx2">
+                                <span>KTX2 纹理</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="togglePlAdvanced()" class="w-full flex items-center justify-between px-5 py-3 text-xs font-medium text-gray-400 hover:text-gray-200 transition border-t border-white/5">
+                    <span class="flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                        高级参数
+                    </span>
+                    <svg id="plAdvArrow" class="w-3.5 h-3.5 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                <div id="plAdvPanel" class="collapse-body">
+                    <div class="px-5 pb-4 space-y-3 border-t border-white/5 pt-3">
+                        <div class="grid grid-cols-4 gap-2">
+                            <div><label class="text-[10px] text-gray-500">LOD 层级</label><input id="plLods" type="number" value="3" min="1" max="10" class="input-f mt-1 text-xs"></div>
+                            <div><label class="text-[10px] text-gray-500">分割数</label><input id="plDivisions" type="number" value="2" min="1" max="8" class="input-f mt-1 text-xs"></div>
+                            <div><label class="text-[10px] text-gray-500">误差阈值</label><input id="plError" type="number" value="100" min="1" step="any" class="input-f mt-1 text-xs"></div>
+                            <div><label class="text-[10px] text-gray-500">缩放比例</label><input id="plScale" type="number" value="1" min="0.001" step="any" class="input-f mt-1 text-xs"></div>
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-gray-500 mb-1.5 block">模型朝向修正（度）</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div><label class="text-[10px] text-gray-500">绕 X 轴</label><input id="plRotateX" type="number" value="-90" step="any" class="input-f mt-1 text-xs"></div>
+                                <div><label class="text-[10px] text-gray-500">绕 Y 轴</label><input id="plRotateY" type="number" value="0" step="any" class="input-f mt-1 text-xs"></div>
+                                <div><label class="text-[10px] text-gray-500">绕 Z 轴</label><input id="plRotateZ" type="number" value="0" step="any" class="input-f mt-1 text-xs"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 开始转换 -->
+            <div id="pipelineConvertSection" class="hidden" style="flex:0 0 auto">
+                <button id="pipelineConvertBtn" onclick="startPipelineConvert()" class="btn btn-primary w-full justify-center py-3 text-sm font-bold tracking-wider" style="border-radius:14px">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    开始管线转换
+                </button>
+            </div>
+        </div>
+
+        <!-- ====== Page: 3D 预览 ====== -->
+        <div id="page-preview" class="page" style="height:100%;overflow:hidden">
+            <div class="flex items-center gap-3 px-6 py-2 flex-shrink-0 border-b border-white/5" style="z-index:10;position:relative">
+                <span class="text-xs text-gray-500" id="previewTask">选择已完成的任务进行预览</span>
+                <button onclick="refreshPreview()" class="btn btn-ghost text-xs py-1 px-3 ml-auto">刷新</button>
+            </div>
+            <div style="flex:1;position:relative;min-height:0">
+                <div id="cesiumContainer" style="position:absolute;top:0;left:0;right:0;bottom:0;background:#0b0f1a"></div>
+                <div id="viewerPlaceholder" style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;pointer-events:none">
+                    <svg style="width:80px;height:80px;stroke:rgba(255,255,255,0.08)" fill="none" stroke-width="1" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                    <p class="text-sm text-gray-600">转换完成后在此处预览 3D Tiles</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ========== 全局状态 ==========
+let selectedFiles = [];
+let viewer = null;
+let currentTileset = null;
+let pollingTimers = {};
+let currentMode = 'octree';
+let lastTasksJson = '';
+
+// ========== 页面切换 ==========
+function switchPage(page) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    document.getElementById('nav-' + page).classList.add('active');
+    const titles = { task: '任务配置', tasks: '任务列表', history: '历史记录', preview: '3D 预览', pipeline: '管线转换' };
+    document.getElementById('pageTitle').textContent = titles[page] || page;
+    if (page === 'tasks') loadTasks();
+    if (page === 'history') loadHistory();
+}
+
+// ========== 工具状态检测 ==========
+async function checkTool() {
+    try {
+        const resp = await fetch('/api/check-tool');
+        const data = await resp.json();
+        if (data.ready) {
+            document.getElementById('statusDot').className = 'w-2 h-2 rounded-full bg-emerald-400';
+            document.getElementById('statusText').textContent = 'Obj2Tiles 就绪';
+            document.getElementById('statusText').className = 'text-gray-400 text-xs';
+        } else {
+            document.getElementById('statusDot').className = 'w-2 h-2 rounded-full bg-red-400';
+            document.getElementById('statusText').textContent = '未检测到 Obj2Tiles';
+            document.getElementById('statusText').className = 'text-red-400 text-xs';
+        }
+    } catch (err) {
+        console.error('服务连接失败:', err);
+        document.getElementById('statusDot').className = 'w-2 h-2 rounded-full bg-red-400';
+        document.getElementById('statusText').textContent = '服务连接失败';
+    }
+}
+checkTool();
+
+// ========== 文件上传 ==========
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+const fileNameEl = document.getElementById('fileName');
+const convertBtn = document.getElementById('convertBtn');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadZone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFiles(fileInput.files); });
+
+function handleFiles(fileList) {
+    selectedFiles = Array.from(fileList);
+    const hasObj = selectedFiles.some(f => f.name.toLowerCase().endsWith('.obj'));
+    const hasZip = selectedFiles.some(f => f.name.toLowerCase().endsWith('.zip'));
+    if (!hasObj && !hasZip) { alert('请至少包含一个 .obj 或 .zip 文件'); return; }
+    const names = selectedFiles.map(f => f.name);
+    const totalSize = selectedFiles.reduce((s, f) => s + f.size, 0);
+    fileNameEl.textContent = names.join(', ') + ' (共 ' + formatSize(totalSize) + ')';
+    convertBtn.disabled = false;
+}
+
+function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+    return (bytes / 1073741824).toFixed(2) + ' GB';
+}
+
+// ========== 转换模式 ==========
+function setMode(mode) {
+    currentMode = mode;
+    const ac = 'flex-1 py-2 rounded-lg text-xs font-medium border-2 border-indigo-500 bg-indigo-500/15 text-indigo-300 transition cursor-pointer';
+    const ic = 'flex-1 py-2 rounded-lg text-xs font-medium border-2 border-white/10 text-gray-500 hover:border-white/20 transition cursor-pointer';
+    document.getElementById('modeOctree').className = mode === 'octree' ? ac : ic;
+    document.getElementById('modeSimple').className = mode === 'simple' ? ac : ic;
+    document.getElementById('octreeParams').classList.toggle('hidden', mode === 'simple');
+    document.getElementById('simpleParams').classList.toggle('hidden', mode === 'octree');
+    const localChk = document.getElementById('localMode');
+    const texChk = document.getElementById('keepTextures');
+    if (mode === 'simple') {
+        localChk.checked = true;
+        texChk.checked = true;
+        document.getElementById('geoPanel').style.display = 'none';
+    } else {
+        localChk.checked = false;
+        texChk.checked = false;
+        document.getElementById('geoPanel').style.display = '';
+    }
+}
+
+// ========== 折叠面板 ==========
+function toggleAdvanced() {
+    const p = document.getElementById('advPanel');
+    const a = document.getElementById('advArrow');
+    p.classList.toggle('open');
+    a.style.transform = p.classList.contains('open') ? 'rotate(180deg)' : '';
+}
+
+// ========== 本地模式联动 ==========
+document.getElementById('localMode').addEventListener('change', (e) => {
+    document.getElementById('geoPanel').style.display = e.target.checked ? 'none' : '';
+});
+document.getElementById('ppKtx2').addEventListener('change', (e) => {
+    document.getElementById('ppKtx2Mode').style.display = e.target.checked ? '' : 'none';
+});
+
+// ========== 开始转换 ==========
+async function startConvert() {
+    if (!selectedFiles.length) return;
+    const formData = new FormData();
+    selectedFiles.forEach(f => formData.append('files', f));
+
+    const lat = document.getElementById('lat').value;
+    const lon = document.getElementById('lon').value;
+    const alt = document.getElementById('alt').value;
+    if (lat) formData.append('lat', lat);
+    if (lon) formData.append('lon', lon);
+    if (alt) formData.append('alt', alt);
+
+    formData.append('y_up_to_z_up', document.getElementById('yUpToZUp').checked);
+    formData.append('local', document.getElementById('localMode').checked);
+    formData.append('keep_textures', document.getElementById('keepTextures').checked);
+    formData.append('rotate_x', document.getElementById('rotateX').value);
+    formData.append('rotate_y', document.getElementById('rotateY').value);
+    formData.append('rotate_z', document.getElementById('rotateZ').value);
+    formData.append('zsplit', document.getElementById('zsplit').checked);
+    formData.append('use_system_temp', document.getElementById('useSystemTemp').checked);
+    formData.append('keep_intermediate', document.getElementById('keepIntermediate').checked);
+    const stage = document.getElementById('stage').value;
+    if (stage) formData.append('stage', stage);
+    formData.append('pp_draco', document.getElementById('ppDraco').checked);
+    formData.append('pp_webp', document.getElementById('ppWebp').checked);
+    formData.append('pp_ktx2', document.getElementById('ppKtx2').checked);
+    if (document.getElementById('ppKtx2').checked) formData.append('pp_ktx2_mode', document.getElementById('ppKtx2Mode').value);
+    formData.append('mode', currentMode);
+
+    if (currentMode === 'simple') {
+        formData.append('lods', '1');
+        formData.append('divisions', '1');
+        formData.append('scale', document.getElementById('scaleSimple').value);
+    } else {
+        formData.append('lods', document.getElementById('lods').value);
+        formData.append('divisions', document.getElementById('divisions').value);
+        formData.append('error', document.getElementById('error').value);
+        formData.append('scale', document.getElementById('scale').value);
+        const strategy = document.getElementById('splitStrategy').value;
+        if (strategy) formData.append('split_strategy', strategy);
+    }
+
+    convertBtn.disabled = true;
+    convertBtn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> 上传中 0%';
+
+    try {
+        const data = await new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/api/upload');
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    const pct = Math.round(e.loaded / e.total * 100);
+                    convertBtn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> 上传中 ' + pct + '%';
+                }
+            };
+            xhr.onload = () => {
+                try { resolve(JSON.parse(xhr.responseText)); } catch (e) { reject(new Error('响应解析失败')); }
+            };
+            xhr.onerror = () => reject(new Error('网络错误'));
+            xhr.send(formData);
+        });
+        if (data.error) { alert(data.error); resetConvertBtn(); return; }
+        const ids = data.task_ids || [data.task_id];
+        ids.forEach(id => startPolling(id));
+        document.getElementById('navBadge').classList.remove('hidden');
+        switchPage('tasks');
+    } catch (err) {
+        alert('上传失败: ' + err.message);
+    }
+
+    resetConvertBtn();
+    selectedFiles = [];
+    fileNameEl.textContent = '';
+    fileInput.value = '';
+}
+
+function resetConvertBtn() {
+    convertBtn.disabled = false;
+    convertBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> 开始转换';
+}
+
+// ========== 任务状态轮询 ==========
+function startPolling(taskId) {
+    if (pollingTimers[taskId]) return;
+    let interval = 1000;
+    const poll = async () => {
+        try {
+            const resp = await fetch('/api/status/' + taskId);
+            const data = await resp.json();
+            loadTasks();
+            if (data.log) {
+                const sec = document.getElementById('logSection');
+                sec.classList.remove('hidden');
+                document.getElementById('logTaskId').textContent = '#' + taskId;
+                document.getElementById('logContent').textContent = data.log;
+                document.getElementById('logContent').scrollTop = 999999;
+            }
+            if (data.status === 'done' || data.status === 'error') {
+                delete pollingTimers[taskId];
+                if (Object.keys(pollingTimers).length === 0) {
+                    document.getElementById('navBadge').classList.add('hidden');
+                }
+                return;
+            }
+            interval = data.status === 'running' ? 2000 : 5000;
+        } catch (err) {
+            console.error('轮询任务状态失败:', err);
+            interval = Math.min(interval * 2, 10000);
+        }
+        pollingTimers[taskId] = setTimeout(poll, interval);
+    };
+    pollingTimers[taskId] = setTimeout(poll, interval);
+}
+
+// ========== 任务列表 ==========
+async function loadTasks() {
+    try {
+        const resp = await fetch('/api/tasks');
+        const data = await resp.json();
+        const json = JSON.stringify(data);
+        if (json === lastTasksJson) return;
+        lastTasksJson = json;
+        renderTasks(data);
+    } catch (err) { console.error('加载任务列表失败:', err); }
+}
+
+function renderTasks(tasks) {
+    const list = document.getElementById('taskList');
+    const empty = document.getElementById('taskEmpty');
+    const count = document.getElementById('taskCount');
+    count.textContent = tasks.length + ' 个任务';
+
+    if (!tasks.length) {
+        list.innerHTML = '';
+        empty.classList.remove('hidden');
+        list.classList.add('hidden');
+        return;
+    }
+    empty.classList.add('hidden');
+    list.classList.remove('hidden');
+
+    const badgeCls = { queued: 'badge bg-white/5 text-gray-500', running: 'badge bg-indigo-500/20 text-indigo-300', done: 'badge bg-emerald-500/20 text-emerald-300', error: 'badge bg-red-500/20 text-red-300' };
+    const labels = { queued: '排队中', running: '转换中', done: '完成', error: '失败' };
+    const modeLbl = { simple: '小场景', octree: '八叉树', pipeline: '管线' };
+    const dotCls = { queued: 'w-2 h-2 rounded-full bg-gray-600', running: 'w-2 h-2 rounded-full bg-indigo-400 pulse', done: 'w-2 h-2 rounded-full bg-emerald-400', error: 'w-2 h-2 rounded-full bg-red-400' };
+    const barColors = { done: 'linear-gradient(180deg,#10b981,#34d399)', error: 'linear-gradient(180deg,#ef4444,#f87171)' };
+
+    list.innerHTML = tasks.map((t, idx) => {
+        const acts = [];
+        if (t.tileset_url) acts.push(`<button onclick="event.stopPropagation();loadTileset('${t.tileset_url}','${t.task_id}')" class="btn btn-ghost" style="font-size:10px;padding:5px 10px;border-radius:6px" title="3D 预览"><svg style="width:12px;height:12px" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></button>`);
+        acts.push(`<button onclick="event.stopPropagation();deleteTask('${t.task_id}')" class="btn btn-ghost" style="font-size:10px;padding:5px 10px;border-radius:6px;color:#f87171" title="删除"><svg style="width:12px;height:12px" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>`);
+
+        return `<div class="task-card fade-up" onclick="selectTask('${t.task_id}')" style="animation-delay:${idx*60}ms">
+            <div style="display:flex;align-items:stretch">
+                <div style="width:4px;flex-shrink:0;background:${barColors[t.status] || 'linear-gradient(180deg,#6366f1,#8b5cf6)'};border-radius:14px 0 0 14px;opacity:.6"></div>
+                <div style="flex:1;padding:14px 16px;min-width:0">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                        <div class="${dotCls[t.status]}"></div>
+                        <span style="font-size:13px;font-weight:600;color:#e5e7eb;font-family:monospace">#${t.task_id}</span>${t.obj_name ? `<span style="font-size:11px;color:#9ca3af;font-weight:400">${escapeHtml(t.obj_name)}</span>` : ''}
+                        <span class="${badgeCls[t.status]}">${labels[t.status]}</span>
+                        <span class="badge bg-indigo-500/15 text-indigo-300">${modeLbl[t.mode] || '八叉树'}</span>
+                    </div>
+                    <div style="font-size:11px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(t.message)}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:2px;padding:8px 12px;border-left:1px solid rgba(255,255,255,0.04);flex-shrink:0">${acts.join('')}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+async function selectTask(taskId) {
+    try {
+        const resp = await fetch('/api/status/' + taskId);
+        const data = await resp.json();
+        if (data.log) {
+            document.getElementById('logSection').classList.remove('hidden');
+            document.getElementById('logTaskId').textContent = '#' + taskId;
+            document.getElementById('logContent').textContent = data.log;
+        }
+        if (data.tileset_url) loadTileset(data.tileset_url, taskId);
+    } catch (err) { console.error('查询任务详情失败:', err); }
+}
+
+async function deleteTask(taskId) {
+    if (!confirm('确定删除此任务？')) return;
+    await fetch('/api/delete/' + taskId, { method: 'DELETE' });
+    loadTasks();
+}
+
+// ========== CesiumJS 3D 预览 ==========
+function initViewer() {
+    if (viewer) return;
+    document.getElementById('viewerPlaceholder').style.display = 'none';
+    Cesium.Ion.defaultAccessToken = undefined;
+    viewer = new Cesium.Viewer('cesiumContainer', {
+        animation: false, timeline: false, baseLayerPicker: false,
+        geocoder: false, homeButton: false, sceneModePicker: false,
+        navigationHelpButton: false, fullscreenButton: false,
+        infoBox: false, selectionIndicator: false,
+        imageryProvider: new Cesium.SingleTileImageryProvider({
+            url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg==',
+            rectangle: Cesium.Rectangle.fromDegrees(-180, -90, 180, 90),
+        }),
+        skyBox: false, skyAtmosphere: false,
+        contextOptions: { webgl: { alpha: true } },
+    });
+    viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#0b0f1a');
+    viewer.scene.globe.show = false;
+}
+
+async function loadTileset(url, taskId) {
+    switchPage('preview');
+    document.getElementById('previewTask').textContent = '预览任务 #' + taskId;
+    initViewer();
+    if (currentTileset) {
+        viewer.scene.primitives.remove(currentTileset);
+        currentTileset = null;
+    }
+    try {
+        const fullUrl = window.location.origin + url;
+        currentTileset = await Cesium.Cesium3DTileset.fromUrl(fullUrl);
+        viewer.scene.primitives.add(currentTileset);
+        viewer.zoomTo(currentTileset);
+    } catch (err) {
+        try {
+            currentTileset = new Cesium.Cesium3DTileset({ url: url });
+            viewer.scene.primitives.add(currentTileset);
+            currentTileset.readyPromise.then(() => viewer.zoomTo(currentTileset));
+        } catch (err2) {
+            alert('加载 3D Tiles 失败: ' + err2.message);
+        }
+    }
+}
+
+function refreshPreview() {
+    if (currentTileset && viewer) viewer.zoomTo(currentTileset);
+}
+
+// ========== 历史记录 ==========
+let lastHistoryJson = '';
+async function loadHistory() {
+    try {
+        const resp = await fetch('/api/history');
+        const data = await resp.json();
+        const json = JSON.stringify(data);
+        if (json === lastHistoryJson) return;
+        lastHistoryJson = json;
+        renderHistory(data);
+    } catch (err) { console.error('加载历史记录失败:', err); }
+}
+
+function renderHistory(records) {
+    const list = document.getElementById('historyList');
+    const empty = document.getElementById('historyEmpty');
+    const count = document.getElementById('historyCount');
+    count.textContent = records.length + ' 条记录';
+
+    if (!records.length) {
+        list.innerHTML = '';
+        empty.classList.remove('hidden');
+        list.classList.add('hidden');
+        return;
+    }
+    empty.classList.add('hidden');
+    list.classList.remove('hidden');
+
+    const modeLbl = { simple: '小场景', octree: '八叉树', pipeline: '管线' };
+    list.innerHTML = records.map((r, idx) => {
+        return `<div class="task-card fade-up" style="animation-delay:${idx*40}ms">
+            <div style="display:flex;align-items:stretch">
+                <div style="width:4px;flex-shrink:0;background:linear-gradient(180deg,#10b981,#34d399);border-radius:14px 0 0 14px;opacity:.6"></div>
+                <div style="flex:1;padding:14px 16px;min-width:0">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                        <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+                        <span style="font-size:13px;font-weight:600;color:#e5e7eb">${escapeHtml(r.obj_name || r.task_id)}</span>
+                        <span class="badge bg-emerald-500/20 text-emerald-300">完成</span>
+                        <span class="badge bg-indigo-500/15 text-indigo-300">${modeLbl[r.mode] || '八叉树'}</span>
+                        <span style="font-size:10px;color:#4b5563;margin-left:auto">${r.timestamp || ''}</span>
+                    </div>
+                    <div style="font-size:11px;color:#6b7280;font-family:monospace">#${r.task_id}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:2px;padding:8px 12px;border-left:1px solid rgba(255,255,255,0.04);flex-shrink:0">
+                    ${r.tileset_url ? `<button onclick="loadTileset('${r.tileset_url}','${r.task_id}')" class="btn btn-ghost" style="font-size:10px;padding:5px 10px;border-radius:6px" title="3D 预览"><svg style="width:12px;height:12px" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></button>` : ''}
+                    <button onclick="deleteHistoryRecord('${r.task_id}')" class="btn btn-ghost" style="font-size:10px;padding:5px 10px;border-radius:6px;color:#f87171" title="删除记录"><svg style="width:12px;height:12px" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function deleteHistoryRecord(taskId) {
+    if (!confirm('确定删除此历史记录？')) return;
+    await fetch('/api/history/' + taskId, { method: 'DELETE' });
+    lastHistoryJson = '';
+    loadHistory();
+}
+
+// ========== 管线转换 ==========
+let pipelineScanData = null;
+
+async function scanPipeline() {
+    const pathInput = document.getElementById('pipelinePath');
+    const dir = pathInput.value.trim();
+    if (!dir) { alert('请输入目录路径'); return; }
+
+    const btn = document.getElementById('pipelineScanBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> 扫描中...';
+
+    try {
+        const resp = await fetch('/api/pipeline-scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: dir })
+        });
+        const data = await resp.json();
+        if (data.error) { alert(data.error); return; }
+
+        pipelineScanData = data;
+        document.getElementById('plModelCount').textContent = data.count;
+        document.getElementById('plEpsg').textContent = data.epsg_list.join(', ') || '-';
+        document.getElementById('plTexCount').textContent = data.textures.length;
+        const types = [...new Set(data.items.map(i => i.data_type).filter(Boolean))];
+        document.getElementById('plDataType').textContent = types.join(', ') || '-';
+
+        document.getElementById('pipelineResult').classList.remove('hidden');
+        document.getElementById('pipelineOptions').classList.remove('hidden');
+        document.getElementById('pipelineConvertSection').classList.remove('hidden');
+    } catch (err) {
+        alert('扫描失败: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> 扫描目录';
+    }
+}
+
+function togglePlAdvanced() {
+    const p = document.getElementById('plAdvPanel');
+    const a = document.getElementById('plAdvArrow');
+    p.classList.toggle('open');
+    a.style.transform = p.classList.contains('open') ? 'rotate(180deg)' : '';
+}
+
+async function startPipelineConvert() {
+    if (!pipelineScanData || !pipelineScanData.count) { alert('请先扫描目录'); return; }
+
+    const btn = document.getElementById('pipelineConvertBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> 启动中...';
+
+    const options = {
+        lods: parseInt(document.getElementById('plLods').value) || 3,
+        divisions: parseInt(document.getElementById('plDivisions').value) || 2,
+        error: parseFloat(document.getElementById('plError').value) || 100,
+        scale: parseFloat(document.getElementById('plScale').value) || 1,
+        rotate_x: parseFloat(document.getElementById('plRotateX').value) || 0,
+        rotate_y: parseFloat(document.getElementById('plRotateY').value) || 0,
+        rotate_z: parseFloat(document.getElementById('plRotateZ').value) || 0,
+        keep_textures: document.getElementById('plKeepTextures').checked,
+        pp_draco: document.getElementById('plDraco').checked,
+        pp_webp: document.getElementById('plWebp').checked,
+        pp_ktx2: document.getElementById('plKtx2').checked,
+    };
+
+    try {
+        const resp = await fetch('/api/pipeline-convert', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: document.getElementById('pipelinePath').value.trim(), options })
+        });
+        const data = await resp.json();
+        if (data.error) { alert(data.error); return; }
+
+        const ids = data.task_ids || [data.task_id];
+        ids.forEach(id => startPolling(id));
+        document.getElementById('navBadge').classList.remove('hidden');
+        switchPage('tasks');
+    } catch (err) {
+        alert('启动失败: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> 开始管线转换';
+    }
+}
+
+// ========== 初始化 ==========
+loadTasks();
+setInterval(loadTasks, 5000);
+</script>
+</body>
+</html>
