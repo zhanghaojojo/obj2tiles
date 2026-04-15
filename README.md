@@ -12,8 +12,23 @@
 [![Flask](https://img.shields.io/badge/Flask-3.x-000000?logo=flask)](https://flask.palletsprojects.com)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20|%20Linux%20|%20麒麟%20|%20统信-blue)]()
+[![Release](https://img.shields.io/github/v/release/zhanghaojojo/obj2tiles?label=Release&color=orange)](https://github.com/zhanghaojojo/obj2tiles/releases/latest)
 
 </div>
+
+---
+
+## 下载安装
+
+前往 [Releases](https://github.com/zhanghaojojo/obj2tiles/releases/latest) 页面，根据操作系统下载对应的安装包：
+
+| 平台 | 架构 | 文件格式 | 适用系统 |
+|:---|:---|:---|:---|
+| 🪟 Windows | x86_64 | `.zip` | Windows 10 / 11 |
+| 🐧 Linux | x86_64 | `.tar.gz` | Ubuntu / CentOS / 银河麒麟 / 统信 UOS |
+| 🐧 Linux | ARM64 (aarch64) | `.tar.gz` | 银河麒麟 / 统信 UOS (ARM 版) |
+
+> 每个安装包内已包含离线 Python 依赖包（`vendor/python/`），内网环境可直接使用。
 
 ---
 
@@ -60,34 +75,45 @@
 
 ## 快速开始
 
-### Windows
+### 方式一：下载安装包（推荐）
 
+从 [Releases](https://github.com/zhanghaojojo/obj2tiles/releases/latest) 下载对应平台的安装包。
+
+**Windows:**
+```
+1. 解压 obj2tiles-vX.X.X-windows-x86_64.zip
+2. 双击 install.bat 安装依赖
+3. 双击 run.bat 启动服务
+4. 浏览器访问 http://localhost:38020
+```
+
+**Linux / 麒麟 / 统信:**
 ```bash
-# 克隆仓库
+tar -xzf obj2tiles-vX.X.X-linux-x86_64.tar.gz
+cd obj2tiles-vX.X.X
+chmod +x install.sh start.sh stop.sh
+./install.sh   # 创建虚拟环境 + 离线安装依赖
+./start.sh     # 启动服务
+# 浏览器访问 http://localhost:1986
+```
+
+### 方式二：从源码运行
+
+**Windows:**
+```bash
 git clone https://github.com/zhanghaojojo/obj2tiles.git
 cd obj2tiles
-
-# 安装依赖
 pip install -r requirements.txt
-
-# 启动服务
 python app.py
-
 # 浏览器访问 http://localhost:38020
 ```
 
-### Linux / 麒麟 / 统信
-
+**Linux / 麒麟 / 统信:**
 ```bash
-# 方式一：在线环境
+git clone https://github.com/zhanghaojojo/obj2tiles.git
+cd obj2tiles
 pip3 install -r requirements.txt
 python3 app.py
-
-# 方式二：离线部署（推荐生产环境）
-cd deploy-linux
-chmod +x start.sh stop.sh tools/Obj2Tiles
-./start.sh     # 自动创建 venv → 离线安装依赖 → 启动服务
-./stop.sh      # 停止服务
 ```
 
 > **离线部署包** 内含全量 Python wheels 和预编译二进制工具，无需外网访问。
