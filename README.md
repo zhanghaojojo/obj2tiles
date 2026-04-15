@@ -93,8 +93,8 @@ tar -xzf obj2tiles-vX.X.X-linux-x86_64.tar.gz
 cd obj2tiles-vX.X.X
 chmod +x install.sh start.sh stop.sh
 ./install.sh   # 创建虚拟环境 + 离线安装依赖
-./start.sh     # 启动服务
-# 浏览器访问 http://localhost:1986
+./start.sh     # 启动服务（端口 1986）
+# 或直接运行: source .venv/bin/activate && python app.py  （端口 38020）
 ```
 
 ### 方式二：从源码运行

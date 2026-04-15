@@ -195,7 +195,7 @@ jobs:
               for root, dirs, files in os.walk('obj2tiles-${{ steps.version.outputs.tag }}'):
                   for f in files:
                       fp = os.path.join(root, f)
-                      zf.write(fp)
+                      zf.write(fp, arcname=fp)
           "
           fi
           echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> "$GITHUB_ENV"
@@ -264,8 +264,8 @@ jobs:
             cd obj2tiles-${{ steps.version.outputs.tag }}
             chmod +x install.sh start.sh stop.sh
             ./install.sh   # 创建虚拟环境 + 离线安装依赖
-            ./start.sh     # 启动服务
-            # 浏览器访问 http://localhost:1986
+            ./start.sh     # 启动服务（端口 1986）
+            # 或直接运行: source .venv/bin/activate && python app.py  （端口 38020）
             ```
 
             ### 📋 系统要求
