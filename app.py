@@ -408,8 +408,8 @@ def download_output(task_id):
             as_attachment=True,
             download_name=f"3dtiles_{safe_id}.zip",
         )
-    except Exception as e:
-        return jsonify({"error": f"打包失败: {str(e)}"}), 500
+    except Exception:
+        return jsonify({"error": "打包失败，请稍后重试"}), 500
     finally:
         # send_file with a path will read the file, so schedule cleanup
         # Flask's send_file handles the file before this, but to be safe
