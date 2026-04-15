@@ -1,0 +1,275 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag name (e.g. v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x86_64
+            python-version: "3.10"
+            archive: tar.gz
+          - os: ubuntu-latest
+            platform: linux-arm64
+            python-version: "3.10"
+            archive: tar.gz
+          - os: windows-latest
+            platform: windows-x86_64
+            python-version: "3.10"
+            archive: zip
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.platform }})
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download Python wheels (x86_64)
+        if: matrix.platform != 'linux-arm64'
+        shell: bash
+        run: |
+          mkdir -p dist-pkg/vendor/python
+          pip download -r requirements.txt \
+            --dest dist-pkg/vendor/python \
+            --platform manylinux2014_x86_64 \
+            --platform manylinux_2_17_x86_64 \
+            --platform linux_x86_64 \
+            --platform win_amd64 \
+            --platform any \
+            --python-version 310 \
+            --only-binary=:all: \
+            || pip download -r requirements.txt \
+              --dest dist-pkg/vendor/python
+
+      - name: Download Python wheels (arm64)
+        if: matrix.platform == 'linux-arm64'
+        shell: bash
+        run: |
+          mkdir -p dist-pkg/vendor/python
+          pip download -r requirements.txt \
+            --dest dist-pkg/vendor/python \
+            --platform manylinux2014_aarch64 \
+            --platform manylinux_2_17_aarch64 \
+            --platform linux_aarch64 \
+            --platform any \
+            --python-version 310 \
+            --only-binary=:all: \
+            || pip download -r requirements.txt \
+              --dest dist-pkg/vendor/python
+
+      - name: Assemble package
+        shell: bash
+        run: |
+          PKG="dist-pkg"
+
+          # Core application files
+          cp app.py "$PKG/"
+          cp postprocess.py "$PKG/"
+          cp pipeline_convert.py "$PKG/"
+          cp requirements.txt "$PKG/"
+          cp README.md "$PKG/"
+          cp LICENSE "$PKG/"
+
+          # Templates
+          cp -r templates "$PKG/"
+
+          # Shell scripts (Linux)
+          if [[ "${{ matrix.platform }}" != windows-* ]]; then
+            cp start.sh "$PKG/"
+            cp stop.sh "$PKG/"
+            chmod +x "$PKG/start.sh" "$PKG/stop.sh"
+          fi
+
+          # Deploy-linux contents (Linux only)
+          if [[ "${{ matrix.platform }}" != windows-* ]]; then
+            if [ -d deploy-linux ]; then
+              cp -r deploy-linux "$PKG/"
+            fi
+          fi
+
+          # Create install helper script
+          if [[ "${{ matrix.platform }}" == windows-* ]]; then
+          cat > "$PKG/install.bat" << 'BATCH'
+          @echo off
+          echo ============================================
+          echo   HorizonGIS Model - Install Dependencies
+          echo ============================================
+          echo.
+          echo Installing Python dependencies (offline)...
+          pip install --no-index --find-links=vendor\python -r requirements.txt
+          if %ERRORLEVEL% NEQ 0 (
+              echo.
+              echo Offline install failed, trying online install...
+              pip install -r requirements.txt
+          )
+          echo.
+          echo Installation complete!
+          echo Run: python app.py
+          pause
+          BATCH
+          cat > "$PKG/run.bat" << 'BATCH'
+          @echo off
+          echo Starting HorizonGIS Model service...
+          python app.py
+          BATCH
+          else
+          cat > "$PKG/install.sh" << 'SHELL'
+          #!/bin/bash
+          set -e
+          echo "============================================"
+          echo "  HorizonGIS Model - Install Dependencies"
+          echo "============================================"
+          echo
+          # Create virtual environment if it doesn't exist
+          if [ ! -d ".venv" ]; then
+              echo "Creating Python virtual environment..."
+              python3 -m venv .venv
+          fi
+          echo "Activating virtual environment..."
+          source .venv/bin/activate
+          echo "Installing Python dependencies (offline)..."
+          pip install --no-index --find-links=vendor/python -r requirements.txt || {
+              echo
+              echo "Offline install failed, trying online install..."
+              pip install -r requirements.txt
+          }
+          echo
+          echo "Installation complete!"
+          echo "Run: source .venv/bin/activate && python app.py"
+          echo "Or use: ./start.sh"
+          SHELL
+          chmod +x "$PKG/install.sh"
+          fi
+
+      - name: Create archive (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          ARCHIVE_NAME="obj2tiles-${{ steps.version.outputs.tag }}-${{ matrix.platform }}.tar.gz"
+          mv dist-pkg "obj2tiles-${{ steps.version.outputs.tag }}"
+          tar -czf "$ARCHIVE_NAME" "obj2tiles-${{ steps.version.outputs.tag }}"
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> "$GITHUB_ENV"
+
+      - name: Create archive (zip)
+        if: matrix.archive == 'zip'
+        shell: bash
+        run: |
+          ARCHIVE_NAME="obj2tiles-${{ steps.version.outputs.tag }}-${{ matrix.platform }}.zip"
+          mv dist-pkg "obj2tiles-${{ steps.version.outputs.tag }}"
+          if command -v zip &> /dev/null; then
+            zip -r "$ARCHIVE_NAME" "obj2tiles-${{ steps.version.outputs.tag }}"
+          else
+            python -c "
+          import zipfile, os
+          with zipfile.ZipFile('$ARCHIVE_NAME', 'w', zipfile.ZIP_DEFLATED) as zf:
+              for root, dirs, files in os.walk('obj2tiles-${{ steps.version.outputs.tag }}'):
+                  for f in files:
+                      fp = os.path.join(root, f)
+                      zf.write(fp, arcname=fp)
+          "
+          fi
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: ${{ env.ARCHIVE_NAME }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    name: Create Release
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "浩瀚智模 HorizonGIS Model ${{ steps.version.outputs.tag }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## 浩瀚智模 HorizonGIS Model ${{ steps.version.outputs.tag }}
+
+            ### 📦 下载说明
+
+            | 平台 | 架构 | 文件 |
+            |:---|:---|:---|
+            | 🪟 Windows | x86_64 | `obj2tiles-${{ steps.version.outputs.tag }}-windows-x86_64.zip` |
+            | 🐧 Linux | x86_64 | `obj2tiles-${{ steps.version.outputs.tag }}-linux-x86_64.tar.gz` |
+            | 🐧 Linux | ARM64 (aarch64) | `obj2tiles-${{ steps.version.outputs.tag }}-linux-arm64.tar.gz` |
+
+            ### 🚀 快速使用
+
+            **Windows:**
+            ```
+            1. 解压 zip 文件
+            2. 双击 install.bat 安装依赖
+            3. 双击 run.bat 启动服务
+            4. 浏览器访问 http://localhost:38020
+            ```
+
+            **Linux / 麒麟 / 统信:**
+            ```bash
+            tar -xzf obj2tiles-${{ steps.version.outputs.tag }}-linux-x86_64.tar.gz
+            cd obj2tiles-${{ steps.version.outputs.tag }}
+            chmod +x install.sh start.sh stop.sh
+            ./install.sh   # 创建虚拟环境 + 离线安装依赖
+            ./start.sh     # 启动服务（端口 1986）
+            # 或直接运行: source .venv/bin/activate && python app.py  （端口 38020）
+            ```
+
+            ### 📋 系统要求
+            - Python 3.8+
+            - 每个包内已包含离线 Python 依赖包（vendor/python/）
+          files: |
+            artifacts/**/*
