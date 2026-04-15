@@ -9,9 +9,10 @@ import zipfile
 import shutil
 import datetime
 import threading
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from flask import Flask, request, jsonify, send_from_directory, render_template
+from flask import Flask, request, jsonify, send_from_directory, render_template, send_file
 from flask_cors import CORS
 from postprocess import run_postprocess
 from werkzeug.utils import secure_filename
@@ -374,6 +375,53 @@ def task_status(task_id):
 def serve_output(filepath):
     """提供转换后的 3D Tiles 文件静态服务"""
     return send_from_directory(str(OUTPUT_DIR), filepath)
+
+
+@app.route("/api/download/<task_id>")
+def download_output(task_id):
+    """将任务输出目录打包为 ZIP 下载"""
+    # 验证 task_id 格式，防止路径穿越
+    safe_id = secure_filename(task_id)
+    if not safe_id or safe_id != task_id:
+        return jsonify({"error": "无效的任务 ID"}), 400
+
+    output_path = OUTPUT_DIR / safe_id
+    if not output_path.is_dir():
+        return jsonify({"error": "任务输出目录不存在"}), 404
+
+    # 确认目录内有文件
+    files = list(output_path.rglob("*"))
+    files = [f for f in files if f.is_file()]
+    if not files:
+        return jsonify({"error": "输出目录为空，无可下载内容"}), 404
+
+    zip_fd, zip_path = tempfile.mkstemp(suffix=".zip")
+    os.close(zip_fd)
+    try:
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in files:
+                arcname = f.relative_to(output_path)
+                zf.write(str(f), str(arcname))
+        return send_file(
+            zip_path,
+            mimetype="application/zip",
+            as_attachment=True,
+            download_name=f"3dtiles_{safe_id}.zip",
+        )
+    except Exception as e:
+        return jsonify({"error": f"打包失败: {str(e)}"}), 500
+    finally:
+        # send_file with a path will read the file, so schedule cleanup
+        # Flask's send_file handles the file before this, but to be safe
+        # we use a background thread for cleanup
+        def _cleanup():
+            import time
+            time.sleep(60)
+            try:
+                os.unlink(zip_path)
+            except OSError:
+                pass
+        threading.Thread(target=_cleanup, daemon=True).start()
 
 
 @app.route("/api/check-tool")
